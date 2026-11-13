@@ -9,3 +9,6 @@ package.json.keep
 # OS / editor noise
 Thumbs.db
 .DS_Store
+
+# Release 附件，不进版本库（在 GitHub Releases 上传）
+dsh-add-accio-rc1-v0.2.2.tar.gz
