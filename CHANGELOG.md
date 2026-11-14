@@ -4,6 +4,21 @@
 目标宿主：DeepSeek Harness `0.2.2-rc.1`；实测 Accio `0.38.2` / Windows 11。
 **非官方第三方 fork，与上游作者无关；状态为 RC（候选发布），仅在单台机器验证。**
 
+## 验证状态（2026-11-14 15:00 更新）：图片真正可用
+
+- ✅ **网关级实测**：用本机凭据向 `generateContent` 发一条带 1×1 红色 PNG 的
+  `inline_data` 请求，模型 `1Drift-F8hS3mK7pL6I`（Qwen 3.8 Flash，free，x0.003）
+  在 6.2 秒内完整返回 `The image is a solid red square.` ⇒ 网关接受图片 part，
+  模型确实收到像素。目录接口同时确认 15 个模型中 10 个 `multimodal: true`。
+- ✅ **离线端到端 11 项**：image 块 → 短标记 → `inlineData`；base64 与磁盘附件
+  字节逐字节一致；OpenAI string / array 两种 content 形态都通过；`toSnake` 产出
+  `inline_data` / `mime_type`；路径穿越、非法 id、缺失附件、超限均降级为文字；
+  纯文本 / 系统 / 工具消息路径不变。
+- ⚠️ **仍未做**：改动代码后在 DSH 里重启插件、从输入框贴图发一条完整会话
+  （网关级与离线级已通过，但这条端到端路径需重启后确认）。
+- 改动文件：`lib/adapter.js`、`lib/shim.js`，新增 `lib/image-bridge.js`；
+  `lib/index.js` 仅改注释。`gateway.js` / `oscrypt.js` / `credits.js` 一行未动。
+
 ## 验证状态（2026-11-13 13:43 更新）
 
 - ✅ 运行时实测：DSH 重启后 RC1 成功加载；`/credits` 200（账号/积分正常）、

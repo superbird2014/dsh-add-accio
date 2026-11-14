@@ -19,16 +19,21 @@
 `/refresh` 事件广播 200、host 侧 15 个模型与逐模型解析全部通过、无崩溃日志。
 另经离线函数级验证：签名库可从 `versions\0.38.2` 自动探测到。
 
-**尚未完成的端到端验证**：
-1. 带图片的会话（17:20 恢复「允许贴图」后，图片降级是否真的绕开 `UNSUPPORTED_CONTENT`；
-   目前只做了离线函数级验证，尚未在真实会话里发过图）；
-2. 实际对话时的请求签名链路（`/credits` 不调用签名库，所以还没覆盖到）；
-3. 模型选择器在**全新 profile** 上是否出现 Accio 分组；
-4. 上表第 2 项的广播修复**未做对照实验** —— 实测是「加入广播 + 禁用/启用插件」后分组出现，
+2026-11-14 补充（图片通路）：新增 `lib/image-bridge.js`，把 DSH 的附件引用写成
+短文本标记，由回环 shim 按 `sha256` 读回图片字节、转成 Accio 网关的 `inlineData`
+图片块。离线 11 项端到端测试通过（含字节一致性、路径穿越防护、超限降级）；
+并向网关发出一条真实的 1×1 PNG 请求，`Qwen 3.8 Flash` 正确回答
+"The image is a solid red square."。签名链路也在这次实测中被覆盖。
+
+**尚未完成的端到端验证**（2026-11-14 更新）：
+1. **DSH 内完整带图会话**：代码改动后尚未重启插件重跑。网关级与离线级已通过，
+   但「从输入框贴图 → 模型答对图内容」这条完整路径仍需重启后确认一次；
+2. 模型选择器在**全新 profile** 上是否出现 Accio 分组；
+3. 上表第 2 项的广播修复**未做对照实验** —— 实测是「加入广播 + 禁用/启用插件」后分组出现，
    无法排除「禁用/启用本身就刷新了目录」这一因素。它是针对 0.2.2-rc.1 的**实验性 workaround**，
    对其他 DSH 版本不保证有效。
 
-在这四项补齐前，建议只开 issue / 发 RC 包，**不要打 GitHub Release、不要宣称稳定可用**。
+在这三项补齐前，建议只开 issue / 发 RC 包，**不要打正式 Release、不要宣称稳定可用**。
 
 ---
 
@@ -39,12 +44,13 @@
 | 1 | 设置页没有 Accio 卡片，模型一个都不出现 | 首次安装时 `dsh plugin add <本地目录>` 生成的符号链接指向 profile 之外的源码，`@deepseek-ai/schemastery` 等 peer 无法解析，插件入口抛错被宿主静默跳过 | 保守做法：把包内容**复制成 profile 内的真实目录**（见第二节）。**状态更新**：13:43 重启后 pnpm 按修正过的 `link:` 重建为 Junction 指向本包目录，插件同样正常加载 —— 所以关键不是「必须真实目录」，而是 link 目标必须存在且能被解析 |
 | 2 | 卡片和积分都正常、宿主能列出 15 个模型，但对话界面的模型选择器没有 Accio 分组 | 推断：DSH 前端 `ModelDirectoryResolver` 只在 client 启动时拉一次 `session/modelCatalog`，之后仅靠 `llm/*-updated` 事件刷新；插件在异步 setup 里注册 adapter 后没有事件通知前端。**此项未做对照实验** | 目录预热完成后在 0 / 0.5 / 2 / 6 / 15 秒分五次广播 `llm/models-updated` + `llm/adapters-updated`；另提供只读 `/plugins/dsh-connect-accio/refresh` 手动触发。**实验性 workaround**，仅 0.2.2-rc.1 实测有效 |
 | 3 | 换了 Accio 版本后签名库找不到 | Accio 0.38+ 把真实程序放进 `<Accio>\versions\<版本>\resources\...`，`<Accio>\resources` 是空的；上游只探测扁平目录 | 自动扫描 `versions\*` 并按版本号倒序探测，同时保留旧布局；不再需要手工建 Junction 或设 `ACCIO_SECURITY_GUARD_DIR` |
-| 4 | 选中 Accio 模型发消息报 `pi-ai image input requires the durable attachment service` / `UNSUPPORTED_CONTENT` | 回环 shim 只序列化 `text` 块；宿主看到会话历史里有 `image` 块就要求注入 durable attachment service，而独立 connector 没有该服务，请求在到达 shim 之前就被拦下 | **保留**上游的 `multimodal` 声明（10/15 个模型允许贴图）；在 `streamWithSnapshot` 入口、pi-ai 的 `contentHasImage` 检查**之前**把 `image` 块替换成显式文字占位，覆盖 `stream()` 与 `resolveModel().stream` 两条路径 |
+| 4 | 带图消息报 `UNSUPPORTED_CONTENT`；或能贴图但模型看不到图 | DSH 的 `image` 块只带附件引用（`attachmentId: "sha256:…"`），独立 connector 没有宿主的 durable attachment service，pi-ai 在请求到达 shim 前就拦下；回环 shim 又只序列化 `text` 块 | **保留**上游 `multimodal` 声明；新增 `lib/image-bridge.js`：`streamWithSnapshot` 入口把 `image` 块换成携带附件 id 的短文本标记绕开检查，shim 按 sha256 从 `~/.dsh/attachments/v1/objects/` 读回字节并生成 Gemini `inlineData` part。2026-11-14 网关实测模型能正确识别图片内容 |
 
-第 4 项是 RC1 相对 10:35 那版热修新增的内容，也是「模型能选到、消息却发不出去」的原因。
-17:20 又做了一次修正：最初把整组 15 个模型**一律**声明为 text-only，导致前端直接提示
-「当前模型不支持图片」、连图都贴不上；其实只要请求层先把图片降级，声明里保留 `image`
-并不会触发那个报错。现在按上游 `multimodal` 标志逐个恢复。
+第 4 项在 2026-11-14 又推进了一步：早先只是「能贴图、看不到图」，现在图片字节
+真的会送到网关。做法是把 DSH 的附件引用写成短文本标记（**不含 base64**，避免污染
+上下文与 token 计数），由 shim 在发往 Accio 前读盘还原成 `inlineData` part。
+每次请求最多 4 张、单张 4 MB、合计 8 MB；读不到附件或超限时该张图降级成一行
+文字说明，而不是让整条请求失败。
 
 > **为什么有的模型能贴图、有的仍提示不支持？** Accio 目录里 15 个模型中
 > 10 个 `multimodal: true`、5 个 `false`，本包如实跟随这个标志。这是正常的，不是故障。
@@ -126,7 +132,9 @@ Copy-Item $src $target -Recurse -Force
 2. **对话界面 → 模型选择器**：出现 **Accio** 分组，15 个模型带 `· x0.003` ~ `· x2.8` 倍率后缀
    （Qwen 3.8 Flash、GLM 5.3 Flash、MiniMax M3、DeepSeek V4.1 Flash、GLM-5.1 …）。
    列表有搜索框，输 `x0.003` 最快。
-3. 发一条**纯文本**消息，应正常返回并扣 Accio 积分。
+3. 发一条**纯文本**消息，应正常返回并扣 Accio 积分；再选一个标了
+   `multimodal` 的模型（如 `Qwen 3.8 Flash` / `Qwen 3.8 27B`）贴一张图，
+   模型应能描述图内容。若仍说看不到图，先禁用再启用插件（或完全重启 DSH）加载新代码。
 4. 只读自检（本机回环，不消耗积分）：
 
 ```text
@@ -166,11 +174,12 @@ DSH 的插件日志走 DevTools Console，不落盘；`--enable-logging=file` �
 
 ## 五、已知限制
 
-- **能贴图，但模型看不到图**：Accio 网关本身支持多模态，本连接器的回环 shim 却只转文本。
-  `multimodal: true` 的模型允许在输入框贴图、消息也能发出去；图片会在请求层被替换成
-  `[image omitted: the Accio connector is text-only]`，模型会明确说看不到图，
-  而不是静默编造图片内容。真正要「让模型看见图」必须改 shim 做图片转发，本包尚未实现。
-  需要看图时请切回 DSH 里原生支持视觉的 provider。
+- **图片有额度上限**：每次请求最多 4 张、单张 4 MB、合计 8 MB；附件文件读不到或
+  超限时，该张图会降级成一行文字说明，不会让整条请求失败。只有目录里标了
+  `multimodal: true` 的 10 个模型能贴图，其余 5 个仍会提示不支持——这是上游能力，
+  不是故障。图片只在本机回环内流转，最终仍由 Accio 网关处理，遵循其隐私政策。
+- **DSH 内完整带图会话尚未重跑**：网关级带图请求与离线链路已验证，但代码改动后
+  需要重启插件（或完全重启 DSH）再发一张图确认，别把网关实测当成界面实测。
 - **仅 Windows**：DPAPI + Windows 版 `security_guard.node`。
 - **依赖 Accio 登录态与安装**：插件不提供登录入口；卸载 Accio 后签名库消失，插件失效。
 - **token 刷新只在内存**：轮换后的 refresh token 不写回 Accio 的私有凭据文件；
@@ -180,16 +189,17 @@ DSH 的插件日志走 DevTools Console，不落盘；`--enable-logging=file` �
 
 ### 安全与隐私边界（相对上游未改动）
 
-本 fork 只改了 `lib/index.js`、`lib/adapter.js`、`lib/security-guard.js` 三个文件。
-对上游 master 做过全量 `diff -rq`：除这三个文件与新增的 `original/`、`README.md`、
-`CHANGELOG.md`、`package.json` 外，其余文件逐字节一致。因此**没有改动**凭据读取与
-DPAPI 解密（`oscrypt.js`）、网关请求（`gateway.js`）、回环 shim（`shim.js`）、
+本 fork 修改了 `lib/index.js`、`lib/adapter.js`、`lib/security-guard.js`、
+`lib/shim.js` 四个文件，并新增 `lib/image-bridge.js`（图片桥接，纯函数、可离线测试）。
+其中 `shim.js` 的改动只涉及把图片标记展开成 `inlineData` part；
+**没有改动**凭据读取与 DPAPI 解密（`oscrypt.js`）、网关签名与请求构造（`gateway.js`）、
 积分查询（`credits.js`）；不新增对外网络端点，不记录或上传 token。
+图片字节从本机 `~/.dsh/attachments/` 读出后只经 127.0.0.1 回环 shim 发往 Accio 网关。
 新增的 `/refresh` 只在本机发两个通知事件，`/credits` 沿用上游 loopback-only 保护。
 
 ### 公开分发前请完成
 
-1. 补齐「发布状态」里列出的四项端到端验证；
+1. 补齐「发布状态」里列出的三项端到端验证；
 2. 仓库名带 `-fork` 或 `-rc`，首屏保留上游链接与非官方声明；
 3. 先以 RC / pre-release 提供，不要打正式 GitHub Release；
 4. 保留 `LICENSE`（MIT 要求保留原版权声明）与 `original/` 里的上游快照。
