@@ -1,5 +1,9 @@
 # CHANGELOG — dsh-add-accio-rc1-v0.2.2
 
+## 2026-11-19：版本更新后四插件全部实测通过（文档状态更新）
+
+DSH 与 Accio / Qoder CN / OpenCode / Trae 各客户端版本均已更新；用户确认截至今日四个 agent 插件（`accio` / `qoder-cn` / `opencode` / `trae`）在更新后的环境中**全部实测可用**（OC 可在 DSH 内直接改文件、Trae 可用、Accio/Qoder 正常）。本条仅更新说明文档状态，未改动插件代码；下方各节为当时的历史记录。
+
 基线：`tidys/dsh-connect-accio` master（解包于 2026-11-13），上游 release 为 v0.2.0。
 目标宿主：DeepSeek Harness `0.2.2-rc.1`；实测 Accio `0.38.2` / Windows 11。
 **非官方第三方 fork，与上游作者无关；状态为 RC（候选发布），仅在单台机器验证。**

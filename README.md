@@ -1,5 +1,10 @@
 # dsh-add-accio-rc1-v0.2.2
 
+> ## ✅ 最新状态（2026-11-19，以本块为准）
+>
+> **版本已更新、四个插件全部实测通过。** DSH 与 Accio / Qoder CN / OpenCode / Trae 各客户端均已升级到本机当前安装版本；截至 2026-11-19，本插件与其余三个 agent 插件（`dsh-add-accio`、`dsh-add-qoder-cn`、`dsh-add-opencode`、`dsh-add-trae`）在更新后的环境中**全部实测可用**（用户确认：DSH 内 OC 可直接改文件、Trae 可用、Accio/Qoder 正常）。
+> 下文中标注「尚未验证 / 待确认 / 未做」的段落是**当时的历史记录**，保留供追溯；凡与本块冲突，以本块为准。
+
 把本机已登录的 **Accio** 模型接入 **DeepSeek Harness (DSH)** 的兼容性修复版。
 
 > **非官方第三方修改版（fork）**，原项目为 [`tidys/dsh-connect-accio`](https://github.com/tidys/dsh-connect-accio)（MIT）。
